@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+
+# Local Google credentials must never be committed
+client_secret*.json
+google-account.enc*
+oauth-credentials*.json
