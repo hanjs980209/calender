@@ -1,0 +1,38 @@
+name: Check public Google branding pages
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/check-public-pages.yml
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check homepage, privacy policy and terms without authentication
+        shell: python
+        run: |
+          import time
+          import urllib.request
+          urls = [
+              ('https://hanjs980209.github.io/calender/', '<h1>하루를 기록하는 바탕화면 달력</h1>'),
+              ('https://hanjs980209.github.io/calender/privacy.html', '<h1>개인정보처리방침</h1>'),
+              ('https://hanjs980209.github.io/calender/terms.html', '<h1>이용약관</h1>'),
+          ]
+          for url, expected in urls:
+              for attempt in range(12):
+                  try:
+                      with urllib.request.urlopen(url, timeout=20) as response:
+                          assert response.status == 200, response.status
+                          body = response.read().decode('utf-8')
+                          assert expected in body, 'Expected page content is missing'
+                      print('PASS: public HTTP 200 and expected content: ' + url, flush=True)
+                      break
+                  except Exception as error:
+                      if attempt == 11:
+                          raise
+                      print('Waiting for Pages deployment: ' + str(error), flush=True)
+                      time.sleep(10)
