@@ -13,6 +13,23 @@
 
 개인 테스트 계정으로 사용할 때에도 Google 동의 화면이 표시됩니다. 테스트 상태의 외부 앱은 일반적으로 refresh token이 7일 후 만료되어 다시 로그인이 필요합니다. 다른 사용자에게 배포하려면 Google의 게시·검증 요건을 확인해야 합니다.
 
+## 프로덕션 게시에 필요한 웹페이지
+
+앱 이름과 이메일을 저장했어도 외부 OAuth 앱의 게시 버튼이 비활성화되고 브랜딩 구성을 완료하라는 안내가 나올 수 있습니다. 이때 프로덕션용 홈페이지·개인정보처리방침·이용약관 URL과 승인된 도메인 구성을 확인해야 합니다. 로고의 선택 여부와 웹페이지 게시 요건은 별개입니다.
+
+Google 브랜딩에 입력할 사이트 주소는 다음과 같습니다. 각 페이지가 실제로 열리는 것을 확인한 뒤 입력하세요.
+
+| 항목 | 주소 |
+| --- | --- |
+| 애플리케이션 홈페이지 | https://hanjs980209.github.io/calender/ |
+| 개인정보처리방침 | https://hanjs980209.github.io/calender/privacy.html |
+| 서비스 약관 | https://hanjs980209.github.io/calender/terms.html |
+| 승인된 도메인 | `hanjs980209.github.io` |
+
+Google Search Console에서 소유권 확인을 요구하면 **URL 접두어** 속성에 `https://hanjs980209.github.io/calender/`를 추가하세요. Google이 발급한 HTML 확인 파일을 사이트의 `docs/` 폴더에 배포하거나, HTML 메타 태그를 `docs/index.html`의 `<head>`에 추가한 뒤 확인할 수 있습니다. 확인 파일과 메타 태그는 공개용 소유권 증명이며 OAuth 인증 JSON·토큰과는 다릅니다. 현재 저장소에 Google의 확인 코드는 등록되어 있지 않습니다. 웹페이지 공개, Google Search Console에서의 소유권 확인, OAuth 앱 게시, Google의 브랜드·민감 범위 검증은 각각 별개 단계입니다.
+
+참고: [Google OAuth 브랜딩 안내](https://support.google.com/cloud/answer/15549049), [동일한 게시 제한 문구 해결 사례](https://github.com/shitikanth/calibre-cloud/issues/147). 후자는 사용자 보고이며 개별 프로젝트의 Google 승인이나 검증 면제를 보장하지 않습니다. 게시 후 기존 테스트 토큰은 연결 해제 후 재로그인해 갱신하세요.
+
 ## 2. 앱 연결
 
 1. Windows에서 `하루 달력.exe`를 실행합니다.
