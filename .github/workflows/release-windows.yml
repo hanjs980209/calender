@@ -8,7 +8,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: release-windows-v0.2.0
+  group: release-windows-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   release:
@@ -20,12 +20,20 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      - name: Read release version
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid release version' }
+          "HARU_RELEASE_VERSION=$version" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
       - name: Run tests
         run: npm test
       - name: Package Windows application
         run: npx --no-install electron-builder --win --dir --publish never --config.win.signAndEditExecutable=false
+      - name: Verify built application startup and note persistence
+        run: node scripts/check-packaged-startup.cjs
       - name: Create download and checksum
         shell: pwsh
         run: |
@@ -33,20 +41,25 @@ jobs:
           Copy-Item -Path dist/win-unpacked/* -Destination release/haru-calendar -Recurse -Force
           Copy-Item docs/GOOGLE_CALENDAR.md release/haru-calendar/Google-Calendar-설정.md
           Copy-Item README.md release/haru-calendar/README.md
-          Compress-Archive -Path release/haru-calendar -DestinationPath release/haru-calendar-google-0.2.0-windows-x64.zip -CompressionLevel Optimal
-          $digest = (Get-FileHash release/haru-calendar-google-0.2.0-windows-x64.zip -Algorithm SHA256).Hash.ToLower()
-          "$digest  haru-calendar-google-0.2.0-windows-x64.zip" | Set-Content -Encoding ascii release/SHA256SUMS.txt
-      - name: Upload download files and publish release
+          $filename = "haru-calendar-google-$env:HARU_RELEASE_VERSION-windows-x64.zip"
+          Compress-Archive -Path release/haru-calendar -DestinationPath "release/$filename" -CompressionLevel Optimal
+          $digest = (Get-FileHash "release/$filename" -Algorithm SHA256).Hash.ToLower()
+          "$digest  $filename" | Set-Content -Encoding ascii release/SHA256SUMS.txt
+      - name: Upload files and publish new release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v0.2.0 --repo "$env:GITHUB_REPOSITORY" *> $null
-          if ($LASTEXITCODE -ne 0) {
-            gh release create v0.2.0 --repo "$env:GITHUB_REPOSITORY" --target "$env:GITHUB_SHA" --draft --title '하루 달력 v0.2.0 — Google Calendar 연동' --notes 'Windows 실행 ZIP입니다. 전체 압축을 해제한 뒤 하루 달력.exe를 실행하세요. Google 연결 안내는 ZIP에 포함되어 있습니다.'
+          $tag = "v$env:HARU_RELEASE_VERSION"
+          $existing = gh release view $tag --repo "$env:GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            if ($existing -ne 'true') { throw 'Refusing to replace an already published version' }
+          } else {
+            gh release create $tag --repo "$env:GITHUB_REPOSITORY" --target "$env:GITHUB_SHA" --draft --title "하루 달력 $tag — 시작 오류 수정" --notes-file docs/releases/v0.2.1.md
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-          gh release upload v0.2.0 release/haru-calendar-google-0.2.0-windows-x64.zip release/SHA256SUMS.txt --repo "$env:GITHUB_REPOSITORY" --clobber
+          $filename = "release/haru-calendar-google-$env:HARU_RELEASE_VERSION-windows-x64.zip"
+          gh release upload $tag $filename release/SHA256SUMS.txt --repo "$env:GITHUB_REPOSITORY" --clobber
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          gh release edit v0.2.0 --repo "$env:GITHUB_REPOSITORY" --draft=false
+          gh release edit $tag --repo "$env:GITHUB_REPOSITORY" --draft=false --latest
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
