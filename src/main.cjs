@@ -34,18 +34,18 @@ function save(data) {
 }
 function createWindow() {
   const area = screen.getPrimaryDisplay().workArea;
-  win = new BrowserWindow({width:Math.min(1200,area.width),height:Math.min(810,area.height),frame:false,transparent:true,backgroundColor:'#00000000',skipTaskbar:true,minWidth:760,minHeight:580,webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+  win = new BrowserWindow({width:Math.min(1200,area.width),height:Math.min(810,area.height),show:false,frame:false,transparent:true,backgroundColor:'#00000000',skipTaskbar:true,minWidth:760,minHeight:580,webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   win.loadFile(path.join(__dirname,'index.html'));
   win.on('close', event => {if (!quitting) {event.preventDefault();win.hide();}});
   win.webContents.setWindowOpenHandler(() => ({action:'deny'}));
   win.webContents.on('will-navigate',event => event.preventDefault());
-  win.once('ready-to-show', () => win.moveBottom());
-  const icon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGUlEQVQ4T2Nk+P//PwMlgImBQjBqwKgBDAwAefkv4b6R7YAAAAAASUVORK5CYII=');
+  win.once('ready-to-show', () => win.showInactive());
+  const icon = nativeImage.createFromPath(path.join(__dirname,'tray-icon.png'));
+  if(icon.isEmpty()) throw new Error('트레이 아이콘을 불러오지 못했습니다.');
   tray = new Tray(icon);
   tray.setToolTip('하루 달력');
   tray.setContextMenu(Menu.buildFromTemplate([
     {label:'달력 열기',click:()=>{win.show();win.focus();}},
-    {label:'다른 창 뒤로 보내기',click:()=>{win.showInactive();win.moveBottom();}},
     {label:'로그인 시 시작',type:'checkbox',checked:app.getLoginItemSettings().openAtLogin,enabled:app.isPackaged && process.platform==='win32',click:item=>app.setLoginItemSettings({openAtLogin:item.checked})},
     {type:'separator'}, {label:'종료',click:()=>{quitting=true;app.quit();}}
   ]));
@@ -53,6 +53,7 @@ function createWindow() {
 }
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
+  const diagnostics=require('./runtime-diagnostics.cjs').installDiagnostics({app,dialog});
   app.on('second-instance',()=>{if(win){win.show();win.focus();}});
   app.whenReady().then(()=>{
     google=new GoogleCalendar({read:readGoogle,write:writeGoogle,openBrowser:url=>shell.openExternal(url)});
@@ -74,7 +75,6 @@ else {
     ipcMain.handle('load',()=>load());
     ipcMain.handle('save',(_,data)=>save(data));
     ipcMain.handle('hide',()=>win.hide());
-    ipcMain.handle('bottom',()=>win.moveBottom());
     ipcMain.handle('export',async()=>{
       const result=await dialog.showSaveDialog(win,{defaultPath:'calendar-backup.json',filters:[{name:'JSON',extensions:['json']}]});
       if(!result.canceled) fs.writeFileSync(result.filePath,JSON.stringify(load(),null,2),'utf8');
@@ -89,6 +89,7 @@ else {
       save(data); return data;
     });
     createWindow();
-  });
+    diagnostics.record('window-created');
+  }).catch(diagnostics.fatal);
   app.on('before-quit',()=>{quitting=true;google?.cancel();});
 }

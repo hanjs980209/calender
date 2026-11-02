@@ -85,7 +85,6 @@ $('opacity').oninput=()=>{state.settings.opacity=Number($('opacity').value);appl
 $('opacity').onchange=()=>persist();
 $('monday').onchange=()=>{state.settings.monday=$('monday').checked;persist();render();};
 $('hide').onclick=()=>{if(native)native.hide();else status('트레이 기능은 Windows 앱에서 사용할 수 있습니다');};
-$('bottom').onclick=()=>{if(native)native.bottom();else status('창 배치 기능은 Windows 앱에서 사용할 수 있습니다');};
 $('export').onclick=async()=>{
   try{
     if(native){await saveQueue;await native.export();return;}

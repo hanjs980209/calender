@@ -1,0 +1,45 @@
+name: Diagnose Windows native startup
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/check-native-startup.yml
+permissions:
+  contents: read
+jobs:
+  native-startup:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 858390c5ec94e553d0e699b06865b13c2f9fa25e
+          path: baseline
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Run unit tests
+        run: npm test
+      - name: Observe original release source startup
+        id: baseline
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $env:HARU_STARTUP_SOURCE_ROOT = (Resolve-Path baseline).Path
+          & node_modules/electron/dist/electron.exe test/native-startup.cjs 2>&1 | Tee-Object baseline-startup.log
+          exit $LASTEXITCODE
+      - name: Check corrected startup
+        shell: pwsh
+        run: |
+          Remove-Item Env:HARU_STARTUP_SOURCE_ROOT -ErrorAction SilentlyContinue
+          & node_modules/electron/dist/electron.exe test/native-startup.cjs 2>&1 | Tee-Object corrected-startup.log
+          exit $LASTEXITCODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-startup-observations
+          path: '*-startup.log'

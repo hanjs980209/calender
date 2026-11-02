@@ -8,7 +8,7 @@ const assert=require('node:assert/strict');
   const d=new Date(),key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   let connection={configured:false,connected:false};let data={version:1,notes:{[key]:[{id:'local-note',text:'기존 로컬 메모',done:false,color:'mint'}]},settings:{}};
   let events=[];window.calls=[];
-  window.desktop={load:async()=>structuredClone(data),save:async value=>{data=structuredClone(value);},hide:async()=>{},bottom:async()=>{},
+  window.desktop={load:async()=>structuredClone(data),save:async value=>{data=structuredClone(value);},hide:async()=>{},
    'google-status':async()=>({...connection}),
    'google-configure':async()=>connection={configured:true,connected:false},
    'google-connect':async()=>connection={configured:true,connected:true},
