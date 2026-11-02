@@ -23,6 +23,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci --no-audit --no-fund
+      - name: Install Electron development runtime
+        run: node -e "console.log(require('electron'))"
       - name: Run unit tests
         run: npm test
       - name: Compare original and corrected startup

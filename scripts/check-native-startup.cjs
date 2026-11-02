@@ -1,5 +1,6 @@
 const fs=require('node:fs');const path=require('node:path');const {spawnSync}=require('node:child_process');
-const exe=path.resolve('node_modules/electron/dist/electron.exe');
+// Electron 43 installs its development binary lazily through this supported entry point.
+const exe=require('electron');
 const report={runtimeExists:fs.existsSync(exe),cases:[]};
 for(const [name,source] of [['baseline',path.resolve('baseline')],['corrected',process.cwd()]]){
  const env={...process.env,HARU_STARTUP_SOURCE_ROOT:source};delete env.ELECTRON_RUN_AS_NODE;
