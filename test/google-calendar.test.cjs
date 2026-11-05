@@ -68,7 +68,7 @@ test('캘린더 목록 페이지와 공유 읽기 권한을 반영하고 freeBus
  const result=await f.api.calendarSettings();assert.equal(pages,2);assert.equal(result.items.length,3);assert.equal(result.items[2].readOnly,true);assert.deepEqual(result.visibleIds,['me@example.test']);
 });
 test('공유 표시 선택과 저장 대상을 보존하고 읽기 전용 저장 대상을 거부한다',async()=>{
- const f=sharedFixture(async()=>json({}));await f.api.calendarSettings();const pref={visibleIds:calendars.map(c=>c.id),writeCalendarId:calendars[1].id};await f.api.setSelection(pref);assert.deepEqual(f.api.selection(await f.api.calendars()),pref);
+ const f=sharedFixture(async()=>json({}));await f.api.calendarSettings();const pref={visibleIds:calendars.map(c=>c.id),writeCalendarId:calendars[1].id};await f.api.setSelection(pref);assert.deepEqual(f.api.selection(await f.api.calendars()),{...pref,colorOverrides:{}});
  await assert.rejects(f.api.setSelection({...pref,writeCalendarId:calendars[2].id}),/권한/);await assert.rejects(f.api.setSelection({...pref,visibleIds:['unknown']}),/권한/);
  await f.api.setSelection({...pref,visibleIds:[]});assert.deepEqual(f.api.selection(await f.api.calendars()).visibleIds,[]);
 });
@@ -90,4 +90,11 @@ test('로그인 계정이 바뀌면 이전 계정의 캘린더 선택을 이어 
 test('시간대가 다른 공유 캘린더의 일정은 실제 시각 순서로 정렬한다',async()=>{
  const f=sharedFixture(async url=>json({items:[url.includes(encodeURIComponent(calendars[1].id))?{id:'earlier',start:{dateTime:'2026-11-05T15:00:00+09:00'},end:{dateTime:'2026-11-05T16:00:00+09:00'}}:{id:'later',start:{dateTime:'2026-11-05T08:00:00Z'},end:{dateTime:'2026-11-05T09:00:00Z'}}]}));await f.api.calendars();
  const result=await f.api.list({start:'2026-11-01',end:'2026-12-01',calendarIds:[calendars[2].id,calendars[1].id]});assert.deepEqual(result.map(e=>e.id),['earlier','later']);
+});
+test('캘린더별 표시 색상을 저장하고 표시 선택을 바꿔도 유지한다',async()=>{
+ const f=sharedFixture(async()=>json({items:[]}));const result=await f.api.calendarSettings();assert.equal(new Set(result.items.map(c=>c.color)).size,result.items.length);
+ const pref={visibleIds:calendars.map(c=>c.id),writeCalendarId:calendars[0].id,colorOverrides:{[calendars[1].id]:'#ff8800'}};
+ await f.api.setSelection(pref);let display=await f.api.calendarSettings();assert.equal(display.items.find(c=>c.id===calendars[1].id).color,'#ff8800');
+ await f.api.setSelection({visibleIds:[calendars[0].id],writeCalendarId:calendars[0].id});display=await f.api.calendarSettings();assert.equal(display.colorOverrides[calendars[1].id],'#ff8800');
+ await assert.rejects(f.api.setSelection({...pref,colorOverrides:{[calendars[1].id]:'bad'}}),/색상/);
 });

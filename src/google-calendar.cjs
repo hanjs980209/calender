@@ -1,4 +1,5 @@
 const http = require('node:http');
+const {calendarColors,validColor,PERSONAL_COLOR}=require('./calendar-colors.cjs');
 const { randomBytes, createHash } = require('node:crypto');
 const EVENT_SCOPE='https://www.googleapis.com/auth/calendar.events';
 const LIST_SCOPE='https://www.googleapis.com/auth/calendar.calendarlist.readonly';
@@ -133,22 +134,26 @@ class GoogleCalendar {
     const visible=Array.isArray(pref?.visibleIds)?pref.visibleIds.filter(id=>items.some(c=>c.id===id)):(primary?[primary]:[]);
     const writable=items.filter(c=>!c.readOnly);
     const writeId=writable.some(c=>c.id===pref?.writeCalendarId)?pref.writeCalendarId:(writable.find(c=>c.primary)||writable[0])?.id||'';
-    return {visibleIds:visible,writeCalendarId:writeId};
+    const colorOverrides=Object.fromEntries(Object.entries(pref?.colorOverrides||{}).filter(([id,color])=>items.some(c=>c.id===id)&&validColor(color)));
+    return {visibleIds:visible,writeCalendarId:writeId,colorOverrides};
   }
-  async calendarSettings(force=false){const items=await this.calendars(force);return {items,...this.selection(items)};}
+  async calendarSettings(force=false){const items=await this.calendars(force);const selection=this.selection(items);return {items:calendarColors(items,selection.colorOverrides),...selection};}
   async setSelection(input){
     if(!input||!Array.isArray(input.visibleIds)||input.visibleIds.length>20||new Set(input.visibleIds).size!==input.visibleIds.length)throw new Error('표시할 캘린더는 최대 20개까지 선택하세요.');
     const generation=this.generation,items=await this.calendars();
     if(generation!==this.generation)throw new Error('Google 연결이 변경되었습니다.');
     if(input.visibleIds.some(id=>!items.some(c=>c.id===id))||input.writeCalendarId&&!items.some(c=>c.id===input.writeCalendarId&&!c.readOnly))throw new Error('캘린더 접근 권한을 확인하세요.');
     if(!input.writeCalendarId&&items.some(c=>!c.readOnly))throw new Error('일정을 저장할 캘린더를 선택하세요.');
-    this.write({...this.read(),calendarSelection:{visibleIds:input.visibleIds,writeCalendarId:input.writeCalendarId||''}});
-    return {items,...this.selection(items)};
+    const overrides=input.colorOverrides===undefined?this.selection(items).colorOverrides:input.colorOverrides;
+    if(!overrides||typeof overrides!=='object'||Array.isArray(overrides)||Object.entries(overrides).some(([id,color])=>!items.some(c=>c.id===id)||!validColor(color)))throw new Error('캘린더 표시 색상을 확인하세요.');
+    this.write({...this.read(),calendarSelection:{visibleIds:input.visibleIds,writeCalendarId:input.writeCalendarId||'',colorOverrides:overrides}});
+    const selection=this.selection(items);return {items:calendarColors(items,selection.colorOverrides),...selection};
   }
   async calendarInfo(id,write=false){
     this.checkCalendarId(id);
-    if(id==='primary')return {id,name:'기본 캘린더',readOnly:false,color:'#9fc2e8'};
-    const info=(await this.calendars()).find(c=>c.id===id);
+    if(id==='primary')return {id,name:'내 기본 캘린더',primary:true,readOnly:false,color:PERSONAL_COLOR};
+    const items=await this.calendars();
+    const info=calendarColors(items,this.selection(items).colorOverrides).find(c=>c.id===id);
     if(!info)throw new Error('캘린더 접근 권한이 없습니다. 목록을 새로고침하세요.');
     if(write&&info.readOnly)throw new Error('읽기 전용 공유 캘린더의 일정은 변경할 수 없습니다.');
     return info;
@@ -163,7 +168,7 @@ class GoogleCalendar {
         const params=new URLSearchParams({timeMin:new Date(`${start}T00:00:00`).toISOString(),timeMax:new Date(`${end}T00:00:00`).toISOString(),singleEvents:'true',orderBy:'startTime',maxResults:'2500'});
         const items=[];
         do{const page=await this.request(`?${params}`,{calendarId});items.push(...(page.items||[]));if(!page.nextPageToken)break;params.set('pageToken',page.nextPageToken);}while(true);
-        return items.filter(e=>e.status!=='cancelled').map(e=>({id:e.id,etag:e.etag,calendarId,calendarName:info.name,calendarColor:info.color,summary:e.summary||'(제목 없음)',description:e.description||'',start:e.start,end:e.end,recurring:!!e.recurringEventId,readOnly:info.readOnly||e.locked===true||!!(e.eventType&&e.eventType!=='default')}));
+        return items.filter(e=>e.status!=='cancelled').map(e=>({id:e.id,etag:e.etag,calendarId,calendarName:info.name,calendarColor:info.color,calendarPrimary:!!info.primary,summary:e.summary||'(제목 없음)',description:e.description||'',start:e.start,end:e.end,recurring:!!e.recurringEventId,readOnly:info.readOnly||e.locked===true||!!(e.eventType&&e.eventType!=='default')}));
       }));result.push(...batch.flat());
     }
     const timestamp=event=>new Date(event.start.dateTime||event.start.date+'T00:00:00').getTime();

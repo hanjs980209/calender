@@ -32,7 +32,7 @@ jobs:
         run: npm test
       - name: Package Windows application
         run: npx --no-install electron-builder --win --dir --publish never --config.win.signAndEditExecutable=false
-      - name: Verify built startup, login registration and saved theme and enlarged sidebar with time-zone ordering
+      - name: Verify built startup, login registration and saved theme and resizable panes
         run: node scripts/check-packaged-startup.cjs
       - name: Create download and checksum
         shell: pwsh
@@ -55,7 +55,7 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             if ($existing -ne 'true') { throw 'Refusing to replace an already published version' }
           } else {
-            gh release create $tag --repo "$env:GITHUB_REPOSITORY" --target "$env:GITHUB_SHA" --draft --title "하루 달력 $tag — 공유 캘린더·글자 크기 확대" --notes-file "docs/releases/$tag.md"
+            gh release create $tag --repo "$env:GITHUB_REPOSITORY" --target "$env:GITHUB_SHA" --draft --title "하루 달력 $tag — 가변 너비·캘린더별 색상" --notes-file "docs/releases/$tag.md"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
           $filename = "release/haru-calendar-google-$env:HARU_RELEASE_VERSION-windows-x64.zip"

@@ -2,7 +2,7 @@
 const GoogleView = (()=>{
   const el=id=>document.getElementById(id), native=window.desktop;
   let connection={configured:false,connected:false},events=[],selected=new Date(),view=new Date(),rangeKey='',generation=0,busy=false,editing=null,refreshTimer;
-  let calendarItems=[{id:'primary',name:'기본 캘린더',primary:true,readOnly:false}],visibleIds=['primary'],writeCalendarId='primary';
+  let calendarItems=[{id:'primary',name:'기본 캘린더',primary:true,readOnly:false,color:'#a9dbc6'}],visibleIds=['primary'],writeCalendarId='primary',colorOverrides={};
   const dateKey=Calendar.dateKey;
   const message=error=>String(error?.message||'Google 요청에 실패했습니다.').replace(/^Error invoking remote method '[^']+': (Error: )?/,'');
   function settings(){
@@ -20,14 +20,17 @@ const GoogleView = (()=>{
   function calendarControls(){
     const list=el('google-calendar-list');list.replaceChildren();
     for(const item of calendarItems){
-      const label=document.createElement('label');label.className='calendar-option';
+      const row=document.createElement('div');row.className='calendar-option';
+      const label=document.createElement('label');
       const input=document.createElement('input');input.type='checkbox';input.checked=visibleIds.includes(item.id);input.dataset.calendarId=item.id;
-      const name=document.createElement('span');name.textContent=item.name+(item.readOnly?' · 읽기 전용':'');
+      const name=document.createElement('span');name.textContent=item.name+(item.primary?' · 내 캘린더':'')+(item.readOnly?' · 읽기 전용':'');
       input.onchange=()=>{
-        const selected=[...list.querySelectorAll('input:checked')].map(input=>input.dataset.calendarId);
+        const selected=[...list.querySelectorAll('input[type=checkbox]:checked')].map(input=>input.dataset.calendarId);
         changeSelection({visibleIds:selected,writeCalendarId});
       };
-      label.append(input,name);list.append(label);
+      const swatch=document.createElement('input');swatch.type='color';swatch.className='calendar-color-input';swatch.value=/^#[0-9a-f]{6}$/i.test(item.color||'')?item.color:'#9fc2e8';swatch.setAttribute('aria-label',item.name+' 표시 색상');
+      swatch.onchange=()=>changeSelection({visibleIds,writeCalendarId,colorOverrides:{...colorOverrides,[item.id]:swatch.value}});
+      label.append(input,name);row.append(label,swatch);list.append(row);
     }
     const target=el('google-write-calendar');target.replaceChildren();
     for(const item of calendarItems.filter(item=>!item.readOnly)){
@@ -35,11 +38,11 @@ const GoogleView = (()=>{
     }
     target.value=writeCalendarId;settings();
   }
-  function applyCalendars(data){calendarItems=data.items;visibleIds=data.visibleIds;writeCalendarId=data.writeCalendarId;calendarControls();}
+  function applyCalendars(data){calendarItems=data.items;visibleIds=data.visibleIds;writeCalendarId=data.writeCalendarId;colorOverrides=data.colorOverrides||{};calendarControls();}
   async function loadCalendars(){
     if(!connection.connected){calendarItems=[];visibleIds=[];writeCalendarId='';calendarControls();el('google-calendar-status').textContent='Google 계정을 연결하세요.';return;}
     if(connection.needsReconnect){
-      calendarItems=[{id:'primary',name:'기본 캘린더',primary:true,readOnly:false}];visibleIds=['primary'];writeCalendarId='primary';calendarControls();
+      calendarItems=[{id:'primary',name:'기본 캘린더',primary:true,readOnly:false,color:'#a9dbc6'}];visibleIds=['primary'];writeCalendarId='primary';calendarControls();
       el('google-calendar-status').textContent='기본 캘린더는 계속 볼 수 있습니다. 공유 캘린더를 보려면 위의 권한 추가 버튼으로 다시 로그인하세요.';return;
     }
     try{applyCalendars(await native['google-calendars']());el('google-calendar-status').textContent='최대 20개를 함께 표시합니다. 일정 생성·수정은 쓰기 권한이 있는 캘린더에서만 가능합니다.';}
@@ -58,19 +61,22 @@ const GoogleView = (()=>{
   }
   function onDate(event,key){const [a,b]=eventDates(event);return key>=a&&key<=b;}
   function timeLabel(event){return event.start.date?'종일':new Date(event.start.dateTime).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})+' – '+new Date(event.end.dateTime).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});}
+  function isPersonal(event){return !!event.calendarPrimary||!!calendarItems.find(c=>c.id===event.calendarId)?.primary;}
+  function displayColor(event){const color=calendarItems.find(c=>c.id===event.calendarId)?.color||event.calendarColor;return /^#[0-9a-f]{6}$/i.test(color||'')?color:(isPersonal(event)?'#a9dbc6':'#9fc2e8');}
+  function dayEvents(key){return events.filter(event=>onDate(event,key)).sort((a,b)=>Number(isPersonal(b))-Number(isPersonal(a)));}
   function draw(){
     document.querySelectorAll('.day-note.google').forEach(n=>n.remove());
     for(const cell of document.querySelectorAll('.day')){
-      const matches=events.filter(event=>onDate(event,cell.dataset.date));
+      const matches=dayEvents(cell.dataset.date);
       for(const event of matches.slice(0,2)){
-        const note=document.createElement('span');note.className='day-note google';note.textContent='G · '+event.summary;note.title=(event.calendarName||'Google')+' · '+event.summary;cell.append(note);
+        const note=document.createElement('span');note.className='day-note google';note.textContent='G · '+event.summary;note.title=(event.calendarName||'Google')+' · '+event.summary;const color=displayColor(event);note.style.borderColor=color;note.style.backgroundColor=color+(isPersonal(event)?'30':'18');if(isPersonal(event))note.classList.add('personal-event');cell.append(note);
       }
     }
     const list=el('google-day-events');list.replaceChildren();
-    for(const event of events.filter(event=>onDate(event,dateKey(selected)))){
-      const row=document.createElement('div');row.className='google-event';
+    for(const event of dayEvents(dateKey(selected))){
+      const row=document.createElement('div');row.className='google-event'+(isPersonal(event)?' personal-event':'');row.style.setProperty('--calendar-color',displayColor(event));row.style.backgroundColor=displayColor(event)+(isPersonal(event)?'20':'0d');
       const title=document.createElement('div');title.className='google-event-title';title.textContent=event.summary;
-      const source=document.createElement('div');source.className='google-event-calendar';source.textContent=event.calendarName||'기본 캘린더';
+      const source=document.createElement('div');source.className='google-event-calendar';source.textContent=(event.calendarName||'기본 캘린더')+(isPersonal(event)?' · 내 캘린더':'');
       const time=document.createElement('div');time.className='google-event-time';time.textContent=timeLabel(event)+(event.recurring?' · 반복 일정의 이번 회차':'');
       const actions=document.createElement('div');actions.className='google-event-actions';
       const edit=document.createElement('button');edit.textContent='수정';edit.disabled=event.readOnly||busy;edit.onclick=()=>openEditor(event);

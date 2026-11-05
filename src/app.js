@@ -1,9 +1,9 @@
-/* global Calendar, GoogleView, StartupView, Color, BackgroundPicker */
+/* global Calendar, GoogleView, StartupView, Color, BackgroundPicker, DaySplitter */
 const $ = id => document.getElementById(id);
 const native = window.desktop;
 if (native) document.body.classList.add('desktop');
 let state, selected = new Date(), view = new Date(selected.getFullYear(), selected.getMonth(), 1), color = 'mint';
-let backgroundPicker;
+let backgroundPicker,daySplitter;
 let writable = true, saveQueue = Promise.resolve();
 const colors = {mint:'#a9dbc6',blue:'#9fc2e8',rose:'#e1a9ae',amber:'#e2ca98'};
 const labels = {mint:'초록',blue:'파랑',rose:'분홍',amber:'노랑'};
@@ -24,6 +24,7 @@ function applySettings() {
   const background=Color.normalize(state.settings.background);
   document.documentElement.style.setProperty('--surface',`rgba(${Color.rgb(background).join(',')},${opacity/100})`);
   backgroundPicker?.set(background);
+  daySplitter?.set(state.settings.myDayRatio);
   const [red,green,blue]=Color.rgb(background);
   document.querySelector('.widget').classList.toggle('light-surface',(red*.2126+green*.7152+blue*.0722)/255>.62);
   $('opacity').value=opacity; $('opacity-label').textContent=opacity+'%';
@@ -105,7 +106,7 @@ $('import').onclick=async()=>{
   }catch{status('백업 가져오기에 실패했습니다');}
 };
 document.addEventListener('keydown',event=>{
-  if(['TEXTAREA','INPUT'].includes(event.target.tagName)||$('settings').open)return;
+  if(['TEXTAREA','INPUT','SELECT'].includes(event.target.tagName)||event.target.closest('[role=separator]')||$('settings').open)return;
   if(event.key==='ArrowLeft')moveMonth(-1);if(event.key==='ArrowRight')moveMonth(1);
 });
 (async()=>{
@@ -114,6 +115,7 @@ document.addEventListener('keydown',event=>{
   state||={version:1,notes:{},settings:{opacity:90,monday:false}};
   state.settings||={};
   backgroundPicker=BackgroundPicker.mount({value:state.settings.background,onInput:value=>{state.settings.background=value;applySettings();},onChange:()=>persist()});
+  daySplitter=DaySplitter.mount({value:state.settings.myDayRatio,onInput:ratio=>{state.settings.myDayRatio=ratio;},onChange:()=>persist()});
   applySettings();render();await GoogleView.init();
   if(!writable){$('note-input').disabled=true;document.querySelector('.add-button').disabled=true;}
 })();

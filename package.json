@@ -1,6 +1,6 @@
 {
   "name": "desktop-calendar-widget",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
   "description": "Windows용 바탕화면 달력과 메모 위젯",
   "main": "src/main.cjs",

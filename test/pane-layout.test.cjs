@@ -1,0 +1,5 @@
+const {test}=require('node:test'),assert=require('node:assert/strict');const {measure,validRatio}=require('../src/pane-layout.js');
+test('기본 폭은 235px이며 기존 글자 크기로 시작한다',()=>{const m=measure(1100);assert.equal(m.right,235);assert.equal(m.scale,1);assert.equal(m.left,865);});
+test('오른쪽을 넓히면 달력은 줄고 글자는 오른쪽 폭에 비례해 커진다',()=>{const a=measure(1100,.25),b=measure(1100,.45);assert(b.right>a.right);assert(b.left<a.left);assert(b.scale>a.scale);assert.equal(b.left+b.right,1100);});
+test('작은 창에서도 영역이 겹치지 않고 최소 가독성을 유지한다',()=>{for(const width of [0,200,500,700,1100,1800])for(const ratio of [.01,.2,.5,.99,NaN]){const m=measure(width,ratio);assert(m.left>=0);assert(m.right>=0);assert(Math.abs(m.left+m.right-width)<.001);assert(m.scale>=1&&m.scale<=2);if(width>=700)assert(m.left>=350);}});
+test('저장 비율은 창 크기에 맞춰 적용되고 잘못된 값은 기본값으로 복원한다',()=>{assert(measure(1100,.4).right>measure(700,.4).right);for(const ratio of [null,undefined,'0.4',Infinity,0,1]){assert(!validRatio(ratio));assert.equal(measure(1100,ratio).right,235);}});
