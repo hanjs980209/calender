@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+let checkpoint='launch';
 (async()=>{
   const expected=require('../package.json').version;
   const executablePath=path.resolve('dist/win-unpacked/하루 달력.exe');
@@ -24,22 +25,28 @@ const path = require('node:path');
     await window.getByText('모든 변경사항이 저장되었습니다',{exact:true}).waitFor();
     await window.reload();await window.locator('.note-text').waitFor();
     assert.equal(await window.locator('.note-text').textContent(),'CI 시작 확인');
+    checkpoint='theme settings';
     await window.locator('#settings-button').click();
     await window.locator('#background-hex').fill('#2f6b91');await window.locator('#background-hex').press('Tab');
     await window.getByText('모든 변경사항이 저장되었습니다',{exact:true}).waitFor();
     // Simulate a previous portable executable registered with Electron's same default name.
+    checkpoint='legacy startup registration';
     const oldPath=profile+'\\old-version\\하루 달력.exe';
     await instance.evaluate(({app},old)=>app.setLoginItemSettings({openAtLogin:true,enabled:true,path:old,args:[]}),oldPath);
     assert.equal(await instance.evaluate(({app},old)=>app.getLoginItemSettings({path:old,args:[]}).openAtLogin,oldPath),true);
+    checkpoint='enable startup through settings';
     await window.locator('#startup-enabled').check();
     await window.getByText('다음 Windows 로그인부터 달력이 자동으로 열립니다.',{exact:true}).waitFor();
+    checkpoint='verify current startup registration';
     const registered=await instance.evaluate(({app})=>app.getLoginItemSettings({path:process.execPath,args:[]}));
     assert.equal(registered.openAtLogin,true);assert.equal(registered.executableWillLaunchAtLogin,true);
     assert.equal(await instance.evaluate(({app},old)=>app.getLoginItemSettings({path:old,args:[]}).openAtLogin,oldPath),false);
+    checkpoint='verify restored theme and startup state';
     await window.reload();await window.locator('.day').first().waitFor();await window.locator('#settings-button').click();
     await window.waitForFunction(()=>document.getElementById('startup-enabled').checked);
     assert.equal(await window.locator('#background-hex').inputValue(),'#2f6b91');
     assert.equal(await window.evaluate(()=>document.documentElement.style.getPropertyValue('--surface')),'rgba(47,107,145,0.9)');
+    checkpoint='disable startup through settings';
     await window.locator('#startup-enabled').uncheck();await window.getByText('자동 실행이 꺼져 있습니다.',{exact:true}).waitFor();
     assert.equal(await instance.evaluate(({app})=>app.getLoginItemSettings({path:process.execPath,args:[]}).openAtLogin),false);
     await window.getByRole('button',{name:'닫기',exact:true}).click();
@@ -54,4 +61,7 @@ const path = require('node:path');
     }
     fs.rmSync(profile,{recursive:true,force:true,maxRetries:5,retryDelay:200});
   }
-})().catch(error=>{console.error(error);process.exitCode=1;});
+})().catch(error=>{
+  const report=('Stage: '+checkpoint+'\n'+(error.stack||String(error))).replaceAll('%','%25').replaceAll('\r','%0D').replaceAll('\n','%0A');
+  console.error('::error title=Packaged settings verification::'+report);console.error(error);process.exitCode=1;
+});
