@@ -32,18 +32,18 @@ let checkpoint='launch';
     // Simulate a previous portable executable registered with Electron's same default name.
     checkpoint='legacy startup registration';
     const oldPath=profile+'\\old-version\\하루 달력.exe';
-    await instance.evaluate(({app},old)=>app.setLoginItemSettings({openAtLogin:true,enabled:true,path:old,args:[]}),oldPath);
-    assert.equal(await instance.evaluate(({app},old)=>app.getLoginItemSettings({path:old,args:[]}).openAtLogin,oldPath),true);
+    await instance.evaluate(({app},old)=>app.setLoginItemSettings({openAtLogin:true,enabled:true,path:'"'+old+'"',args:[]}),oldPath);
+    assert.equal(await instance.evaluate(({app},old)=>app.getLoginItemSettings({path:'"'+old+'"',args:[]}).openAtLogin,oldPath),true);
     checkpoint='enable startup through settings';
     await window.locator('#startup-enabled').click();
     await window.waitForFunction(()=>document.getElementById('startup-status').textContent!=='자동 실행 설정 저장 중…');
     checkpoint='verify current startup registration';
-    const registered=await instance.evaluate(({app})=>app.getLoginItemSettings({path:process.execPath,args:[]}));
+    const registered=await instance.evaluate(({app})=>app.getLoginItemSettings({path:'"'+process.execPath+'"',args:[]}));
     const startupUI=await window.locator('#startup-status').textContent();
     const startupDetail=JSON.stringify({registered,ui:startupUI,checked:await window.locator('#startup-enabled').isChecked()});
     assert.equal(registered.openAtLogin,true,startupDetail);assert.equal(registered.executableWillLaunchAtLogin,true,startupDetail);
     assert.equal(await window.locator('#startup-enabled').isChecked(),true,startupDetail);
-    assert.equal(await instance.evaluate(({app},old)=>app.getLoginItemSettings({path:old,args:[]}).openAtLogin,oldPath),false);
+    assert.equal(await instance.evaluate(({app},old)=>app.getLoginItemSettings({path:'"'+old+'"',args:[]}).openAtLogin,oldPath),false);
     checkpoint='verify restored theme and startup state';
     await window.reload();await window.locator('.day').first().waitFor();await window.locator('#settings-button').click();
     await window.waitForFunction(()=>document.getElementById('startup-enabled').checked);
@@ -51,7 +51,7 @@ let checkpoint='launch';
     assert.equal(await window.evaluate(()=>document.documentElement.style.getPropertyValue('--surface')),'rgba(47,107,145,0.9)');
     checkpoint='disable startup through settings';
     await window.locator('#startup-enabled').uncheck();await window.getByText('자동 실행이 꺼져 있습니다.',{exact:true}).waitFor();
-    assert.equal(await instance.evaluate(({app})=>app.getLoginItemSettings({path:process.execPath,args:[]}).openAtLogin),false);
+    assert.equal(await instance.evaluate(({app})=>app.getLoginItemSettings({path:'"'+process.execPath+'"',args:[]}).openAtLogin),false);
     await window.getByRole('button',{name:'닫기',exact:true}).click();
     await instance.evaluate(({BrowserWindow})=>{const win=BrowserWindow.getAllWindows()[0];win.hide();win.showInactive();});
     await new Promise(resolve=>setTimeout(resolve,3000));
@@ -59,7 +59,7 @@ let checkpoint='launch';
     console.log('PASS: built Windows executable v'+expected+', isolated profile, valid tray image, 42 days, note/theme persistence, Windows login registration/remove/path refresh, hide/show and 3-second survival');
   } finally {
     if(instance){
-      try{await instance.evaluate(({app})=>app.setLoginItemSettings({openAtLogin:false,enabled:false,path:process.execPath,args:[]}));}catch{}
+      try{await instance.evaluate(({app})=>app.setLoginItemSettings({openAtLogin:false,enabled:false,path:'"'+process.execPath+'"',args:[]}));}catch{}
       await instance.close();
     }
     fs.rmSync(profile,{recursive:true,force:true,maxRetries:5,retryDelay:200});
