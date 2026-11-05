@@ -166,7 +166,8 @@ class GoogleCalendar {
         return items.filter(e=>e.status!=='cancelled').map(e=>({id:e.id,etag:e.etag,calendarId,calendarName:info.name,calendarColor:info.color,summary:e.summary||'(제목 없음)',description:e.description||'',start:e.start,end:e.end,recurring:!!e.recurringEventId,readOnly:info.readOnly||e.locked===true||!!(e.eventType&&e.eventType!=='default')}));
       }));result.push(...batch.flat());
     }
-    return result.sort((a,b)=>(a.start?.dateTime||a.start?.date||'').localeCompare(b.start?.dateTime||b.start?.date||''));
+    const timestamp=event=>new Date(event.start.dateTime||event.start.date+'T00:00:00').getTime();
+    return result.sort((a,b)=>timestamp(a)-timestamp(b));
   }
   async upsert(input){
     const calendarId=input?.calendarId||'primary';await this.calendarInfo(calendarId,true);

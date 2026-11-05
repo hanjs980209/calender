@@ -87,3 +87,7 @@ test('로그인 계정이 바뀌면 이전 계정의 캘린더 선택을 이어 
  await f.api.calendarSettings();await f.api.setSelection({visibleIds:[calendars[1].id],writeCalendarId:calendars[1].id});other=true;f.api.calendarCache=null;
  const result=await f.api.calendarSettings();assert.deepEqual(result.visibleIds,['other@example.test']);assert.equal(result.writeCalendarId,'other@example.test');
 });
+test('시간대가 다른 공유 캘린더의 일정은 실제 시각 순서로 정렬한다',async()=>{
+ const f=sharedFixture(async url=>json({items:[url.includes(encodeURIComponent(calendars[1].id))?{id:'earlier',start:{dateTime:'2026-11-05T15:00:00+09:00'},end:{dateTime:'2026-11-05T16:00:00+09:00'}}:{id:'later',start:{dateTime:'2026-11-05T08:00:00Z'},end:{dateTime:'2026-11-05T09:00:00Z'}}]}));await f.api.calendars();
+ const result=await f.api.list({start:'2026-11-01',end:'2026-12-01',calendarIds:[calendars[2].id,calendars[1].id]});assert.deepEqual(result.map(e=>e.id),['earlier','later']);
+});

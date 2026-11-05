@@ -54,7 +54,7 @@ node test/google-ui-smoke.cjs
 
 ## 클라우드에서 생성한 실행 패키지
 
-`dist/haru-calendar-google-0.2.3-windows-x64.zip`을 Windows에서 전체 압축 해제한 뒤 `하루 달력.exe`를 실행하세요. 함께 들어 있는 리소스와 DLL을 유지해야 합니다. Windows용 패키징과 ZIP 무결성은 확인했으며, Windows에서의 실제 실행은 아직 검증하지 않았습니다. 이 클라우드 환경에는 Wine이 없어 NSIS 설치 파일 생성은 완료하지 못했습니다. 위 `npm run dist:win` 명령은 Windows에서 실행하세요.
+`dist/haru-calendar-google-0.2.4-windows-x64.zip`을 Windows에서 전체 압축 해제한 뒤 `하루 달력.exe`를 실행하세요. 함께 들어 있는 리소스와 DLL을 유지해야 합니다. Windows용 패키징과 ZIP 무결성은 확인했으며, Windows에서의 실제 실행은 아직 검증하지 않았습니다. 이 클라우드 환경에는 Wine이 없어 NSIS 설치 파일 생성은 완료하지 못했습니다. 위 `npm run dist:win` 명령은 Windows에서 실행하세요.
 
 ## v0.2.0 시작 오류 조사 (2026-11-02)
 
@@ -72,8 +72,8 @@ v0.2.0의 `win.moveBottom()` 호출은 Electron에 없는 메서드이며, 사�
 
 설정의 **배경 색상**에서 색상환을 드래그하거나 밝기·HEX 코드를 조절하세요. 색상환은 좌우 방향키로 색조, 위아래로 채도를 조절할 수 있습니다. 색상과 투명도는 로컬 메모와 함께 저장되며 자동 실행 설정은 Windows의 PC별 시작 설정으로 관리합니다. [v0.2.2 변경 안내](docs/releases/v0.2.2.md)를 확인하세요.
 
-## 공유 캘린더 (v0.2.3)
+## 공유 캘린더 (v0.2.4)
 
 Google Cloud의 데이터 액세스에 `https://www.googleapis.com/auth/calendar.calendarlist.readonly`를 기존 `calendar.events`와 함께 추가하세요. 앱 설정에서 **공유 캘린더 권한 추가**로 한 번 다시 로그인한 뒤 **표시할 Google 캘린더**를 체크하세요. 계정의 등록된 캘린더 중 일정 세부 정보 읽기 권한이 있는 캘린더를 최대 20개까지 함께 표시합니다. 기본 선택은 내 기본 캘린더이며, 선택 내용은 이 PC에 저장됩니다. **새 일정을 저장할 캘린더**에서 쓰기 가능한 대상을 선택하세요. 읽기 전용 공유 일정은 수정·삭제하지 못하며 일정마다 출처를 표시합니다. 공유가 새로 추가되었다면 ‘지금 새로고침’으로 목록을 갱신하세요.
 
-[공유 캘린더 및 글자 크기 확대 변경 안내](docs/releases/v0.2.3.md)를 확인하세요.
+[공유 캘린더 및 글자 크기 확대 변경 안내](docs/releases/v0.2.4.md)를 확인하세요.

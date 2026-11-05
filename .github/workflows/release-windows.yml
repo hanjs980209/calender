@@ -32,7 +32,7 @@ jobs:
         run: npm test
       - name: Package Windows application
         run: npx --no-install electron-builder --win --dir --publish never --config.win.signAndEditExecutable=false
-      - name: Verify built startup, login registration and saved theme and enlarged sidebar text
+      - name: Verify built startup, login registration and saved theme and enlarged sidebar with time-zone ordering
         run: node scripts/check-packaged-startup.cjs
       - name: Create download and checksum
         shell: pwsh
