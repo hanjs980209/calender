@@ -4,6 +4,7 @@ const path = require('node:path');
 const { validData } = require('./calendar.js');
 const { GoogleCalendar } = require('./google-calendar.cjs');
 let google;
+const startup=require('./startup.cjs').createStartupSettings({app});
 function googleVault() { return path.join(app.getPath('userData'), 'google-account.enc'); }
 function readGoogle() {
   if (!fs.existsSync(googleVault())) return {};
@@ -44,12 +45,24 @@ function createWindow() {
   if(icon.isEmpty()) throw new Error('트레이 아이콘을 불러오지 못했습니다.');
   tray = new Tray(icon);
   tray.setToolTip('하루 달력');
+  refreshTrayMenu();
+  tray.on('double-click',()=>{win.show();win.focus();});
+}
+function refreshTrayMenu() {
+  if(!tray)return;
+  const state=startup.get();
   tray.setContextMenu(Menu.buildFromTemplate([
     {label:'달력 열기',click:()=>{win.show();win.focus();}},
-    {label:'로그인 시 시작',type:'checkbox',checked:app.getLoginItemSettings().openAtLogin,enabled:app.isPackaged && process.platform==='win32',click:item=>app.setLoginItemSettings({openAtLogin:item.checked})},
+    {label:'Windows 로그인 시 자동 실행',type:'checkbox',checked:state.enabled,enabled:state.supported&&!state.error,click:item=>{
+      try{setStartup(item.checked);}catch{refreshTrayMenu();dialog.showErrorBox('자동 실행 설정','Windows 자동 실행 설정을 저장하지 못했습니다.');}
+    }},
     {type:'separator'}, {label:'종료',click:()=>{quitting=true;app.quit();}}
   ]));
-  tray.on('double-click',()=>{win.show();win.focus();});
+}
+function setStartup(enabled) {
+  const result=startup.set(enabled);refreshTrayMenu();
+  win?.webContents.send('startup-changed');
+  return result;
 }
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
@@ -72,6 +85,8 @@ else {
     ipcMain.handle('google-list',(_,range)=>google.list(range));
     ipcMain.handle('google-upsert',(_,input)=>google.upsert(input));
     ipcMain.handle('google-remove',(_,input)=>google.remove(input));
+    ipcMain.handle('startup-get',()=>startup.get());
+    ipcMain.handle('startup-set',(_,enabled)=>setStartup(enabled));
     ipcMain.handle('load',()=>load());
     ipcMain.handle('save',(_,data)=>save(data));
     ipcMain.handle('hide',()=>win.hide());

@@ -24,12 +24,34 @@ const path = require('node:path');
     await window.getByText('모든 변경사항이 저장되었습니다',{exact:true}).waitFor();
     await window.reload();await window.locator('.note-text').waitFor();
     assert.equal(await window.locator('.note-text').textContent(),'CI 시작 확인');
+    await window.locator('#settings-button').click();
+    await window.locator('#background-hex').fill('#2f6b91');await window.locator('#background-hex').press('Tab');
+    await window.getByText('모든 변경사항이 저장되었습니다',{exact:true}).waitFor();
+    // Simulate a previous portable executable registered with Electron's same default name.
+    const oldPath=profile+'\\old-version\\하루 달력.exe';
+    await instance.evaluate(({app},old)=>app.setLoginItemSettings({openAtLogin:true,enabled:true,path:old,args:[]}),oldPath);
+    assert.equal(await instance.evaluate(({app},old)=>app.getLoginItemSettings({path:old,args:[]}).openAtLogin,oldPath),true);
+    await window.locator('#startup-enabled').check();
+    await window.getByText('다음 Windows 로그인부터 달력이 자동으로 열립니다.',{exact:true}).waitFor();
+    const registered=await instance.evaluate(({app})=>app.getLoginItemSettings({path:process.execPath,args:[]}));
+    assert.equal(registered.openAtLogin,true);assert.equal(registered.executableWillLaunchAtLogin,true);
+    assert.equal(await instance.evaluate(({app},old)=>app.getLoginItemSettings({path:old,args:[]}).openAtLogin,oldPath),false);
+    await window.reload();await window.locator('.day').first().waitFor();await window.locator('#settings-button').click();
+    await window.waitForFunction(()=>document.getElementById('startup-enabled').checked);
+    assert.equal(await window.locator('#background-hex').inputValue(),'#2f6b91');
+    assert.equal(await window.evaluate(()=>document.documentElement.style.getPropertyValue('--surface')),'rgba(47,107,145,0.9)');
+    await window.locator('#startup-enabled').uncheck();await window.getByText('자동 실행이 꺼져 있습니다.',{exact:true}).waitFor();
+    assert.equal(await instance.evaluate(({app})=>app.getLoginItemSettings({path:process.execPath,args:[]}).openAtLogin),false);
+    await window.getByRole('button',{name:'닫기',exact:true}).click();
     await instance.evaluate(({BrowserWindow})=>{const win=BrowserWindow.getAllWindows()[0];win.hide();win.showInactive();});
     await new Promise(resolve=>setTimeout(resolve,3000));
     assert.deepEqual(errors,[]);
-    console.log('PASS: built Windows executable v'+expected+', isolated profile, valid tray image, 42 days, note persistence, hide/show and 3-second survival');
+    console.log('PASS: built Windows executable v'+expected+', isolated profile, valid tray image, 42 days, note/theme persistence, Windows login registration/remove/path refresh, hide/show and 3-second survival');
   } finally {
-    if(instance)await instance.close();
+    if(instance){
+      try{await instance.evaluate(({app})=>app.setLoginItemSettings({openAtLogin:false,enabled:false,path:process.execPath,args:[]}));}catch{}
+      await instance.close();
+    }
     fs.rmSync(profile,{recursive:true,force:true,maxRetries:5,retryDelay:200});
   }
 })().catch(error=>{console.error(error);process.exitCode=1;});

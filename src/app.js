@@ -1,8 +1,9 @@
-/* global Calendar, GoogleView */
+/* global Calendar, GoogleView, StartupView, Color, BackgroundPicker */
 const $ = id => document.getElementById(id);
 const native = window.desktop;
 if (native) document.body.classList.add('desktop');
 let state, selected = new Date(), view = new Date(selected.getFullYear(), selected.getMonth(), 1), color = 'mint';
+let backgroundPicker;
 let writable = true, saveQueue = Promise.resolve();
 const colors = {mint:'#a9dbc6',blue:'#9fc2e8',rose:'#e1a9ae',amber:'#e2ca98'};
 const labels = {mint:'초록',blue:'파랑',rose:'분홍',amber:'노랑'};
@@ -20,7 +21,11 @@ async function persist() {
 }
 function applySettings() {
   const opacity = Math.max(30,Math.min(100, Number(state.settings.opacity)||90));
-  document.documentElement.style.setProperty('--surface',`rgba(24,38,37,${opacity/100})`);
+  const background=Color.normalize(state.settings.background);
+  document.documentElement.style.setProperty('--surface',`rgba(${Color.rgb(background).join(',')},${opacity/100})`);
+  backgroundPicker?.set(background);
+  const [red,green,blue]=Color.rgb(background);
+  document.querySelector('.widget').classList.toggle('light-surface',(red*.2126+green*.7152+blue*.0722)/255>.62);
   $('opacity').value=opacity; $('opacity-label').textContent=opacity+'%';
   $('monday').checked=!!state.settings.monday;
 }
@@ -80,7 +85,7 @@ Object.entries(colors).forEach(([key,value])=>{
   button.onclick=()=>{color=key;document.querySelectorAll('.color-button').forEach(b=>{b.classList.toggle('active',b===button);b.setAttribute('aria-pressed',String(b===button));});};
   document.querySelector('.colors').append(button);
 });
-$('settings-button').onclick=()=>$('settings').showModal();
+$('settings-button').onclick=()=>{$('settings').showModal();StartupView.refresh();};
 $('opacity').oninput=()=>{state.settings.opacity=Number($('opacity').value);applySettings();};
 $('opacity').onchange=()=>persist();
 $('monday').onchange=()=>{state.settings.monday=$('monday').checked;persist();render();};
@@ -107,6 +112,8 @@ document.addEventListener('keydown',event=>{
   try{state=native?await native.load():JSON.parse(localStorage.getItem('haru-calendar')||'null');if(state&&!Calendar.validData(state))throw new Error();}
   catch{state=null;writable=false;status('저장 데이터를 읽지 못했습니다 · 원본을 보존하고 백업을 확인하세요');}
   state||={version:1,notes:{},settings:{opacity:90,monday:false}};
-  state.settings||={};applySettings();render();await GoogleView.init();
+  state.settings||={};
+  backgroundPicker=BackgroundPicker.mount({value:state.settings.background,onInput:value=>{state.settings.background=value;applySettings();},onChange:()=>persist()});
+  applySettings();render();await GoogleView.init();
   if(!writable){$('note-input').disabled=true;document.querySelector('.add-button').disabled=true;}
 })();

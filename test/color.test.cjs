@@ -1,0 +1,4 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const Color=require('../src/color.js');
+test('HSV 색상환의 기본 색과 무채색을 변환한다',()=>{assert.equal(Color.hsvToHex(0,1,1),'#ff0000');assert.equal(Color.hsvToHex(120,1,1),'#00ff00');assert.equal(Color.hsvToHex(240,1,1),'#0000ff');assert.equal(Color.hsvToHex(0,0,1),'#ffffff');assert.equal(Color.hsvToHex(180,1,0),'#000000');});
+test('저장된 색상은 HSV 왕복 변환 후 같은 RGB 값을 유지한다',()=>{for(const hex of ['#182625','#000000','#ffffff','#ff0012','#123abc','#b4ceef']){const {h,s,v}=Color.hexToHsv(hex);assert.equal(Color.hsvToHex(h,s,v),hex);}});
+test('잘못된 저장 색상에는 기존 기본 배경을 사용한다',()=>{assert.equal(Color.normalize('red'),'#182625');assert.equal(Color.normalize(undefined),'#182625');assert.equal(Color.normalize('#AaBbCc'),'#aabbcc');assert.deepEqual(Color.rgb('#123456'),[18,52,86]);});
