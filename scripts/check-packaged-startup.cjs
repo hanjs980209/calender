@@ -25,6 +25,8 @@ let checkpoint='launch';
     await window.getByText('모든 변경사항이 저장되었습니다',{exact:true}).waitFor();
     await window.reload();await window.locator('.note-text').waitFor();
     assert.equal(await window.locator('.note-text').textContent(),'CI 시작 확인');
+    assert.equal(await window.locator('.note-text').evaluate(node=>parseFloat(getComputedStyle(node).fontSize)),24);
+    assert.equal(await window.locator('#selected-title').evaluate(node=>parseFloat(getComputedStyle(node).fontSize)),44);
     checkpoint='theme settings';
     await window.locator('#settings-button').click();
     await window.locator('#background-hex').fill('#2f6b91');await window.locator('#background-hex').press('Tab');

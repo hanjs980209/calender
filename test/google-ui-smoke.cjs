@@ -13,6 +13,7 @@ const assert=require('node:assert/strict');
    'google-configure':async()=>connection={configured:true,connected:false},
    'google-connect':async()=>connection={configured:true,connected:true},
    'google-disconnect':async()=>connection={configured:true,connected:false},
+   'google-calendars':async()=>({items:[{id:'primary',name:'기본 캘린더',primary:true,readOnly:false}],visibleIds:['primary'],writeCalendarId:'primary'}),
    'google-list':async()=>structuredClone(events),
    'google-upsert':async input=>{
     window.calls.push({action:'save',input});
@@ -20,13 +21,13 @@ const assert=require('node:assert/strict');
     let start,end;
     if(input.allDay){const exclusive=new Date(input.endDate+'T12:00:00');exclusive.setDate(exclusive.getDate()+1);start={date:input.startDate};end={date:`${exclusive.getFullYear()}-${String(exclusive.getMonth()+1).padStart(2,'0')}-${String(exclusive.getDate()).padStart(2,'0')}`};}
     else{start={dateTime:new Date(input.startDate+'T'+input.startTime).toISOString()};end={dateTime:new Date(input.endDate+'T'+input.endTime).toISOString()};}
-    const event={id,etag:'etag-2',summary:input.summary,description:input.description,start,end};events=events.filter(e=>e.id!==id).concat(event);return event;
+    const event={id,calendarId:input.calendarId||'primary',calendarName:'기본 캘린더',etag:'etag-2',summary:input.summary,description:input.description,start,end};events=events.filter(e=>e.id!==id).concat(event);return event;
    },
    'google-remove':async input=>{window.calls.push({action:'remove',input});events=events.filter(e=>e.id!==input.id);}
   };
  });
  await page.goto('http://127.0.0.1:5173');await page.locator('.note-text').waitFor();
- await page.locator('#settings-button').click();await page.locator('#google-configure').click();await page.locator('#google-connect').click();await page.getByText('Google 계정 연결됨 · 기본 캘린더',{exact:true}).waitFor();await page.getByRole('button',{name:'닫기',exact:true}).click();
+ await page.locator('#settings-button').click();await page.locator('#google-configure').click();await page.locator('#google-connect').click();await page.getByText('Google 계정 연결됨',{exact:true}).waitFor();await page.getByRole('button',{name:'닫기',exact:true}).click();
  await page.getByRole('button',{name:'Google로 복사',exact:true}).click();await page.locator('#event-editor[open]').waitFor();assert.equal(await page.locator('#event-summary').inputValue(),'기존 로컬 메모');
  await page.locator('#event-submit').click();await page.locator('.google-event').waitFor();assert.equal(await page.locator('.note-text').textContent(),'기존 로컬 메모');assert.equal(await page.locator('.day.selected .day-note.google').count(),1);
  const first=await page.evaluate(()=>window.calls[0].input);assert.equal(first.requestId.length,32);

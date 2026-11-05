@@ -1,6 +1,9 @@
 const http = require('node:http');
 const { randomBytes, createHash } = require('node:crypto');
-const SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+const EVENT_SCOPE='https://www.googleapis.com/auth/calendar.events';
+const LIST_SCOPE='https://www.googleapis.com/auth/calendar.calendarlist.readonly';
+const SCOPES=[EVENT_SCOPE,LIST_SCOPE];
+const SCOPE=SCOPES.join(' ');
 function credentials(json) {
   const c=json?.installed;
   if(!c || typeof c.client_id!=='string' || !c.client_id.endsWith('.apps.googleusercontent.com') || typeof c.client_secret!=='string') throw new Error('Google Cloud에서 발급한 데스크톱 앱 OAuth JSON을 선택하세요.');
@@ -65,9 +68,9 @@ function eventBody(input) {
   return {summary:input.summary.trim(),description:input.description,start,end};
 }
 class GoogleCalendar {
-  constructor({read,write,openBrowser,fetchImpl=fetch}) {Object.assign(this,{read,write,openBrowser,fetch:fetchImpl});this.auth=null;this.refreshing=null;this.generation=0;}
-  status(){const saved=this.read();return {configured:!!saved.client,connected:!!saved.tokens};}
-  configure(json){const client=credentials(json);this.cancel();this.generation++;this.write({client});return this.status();}
+  constructor({read,write,openBrowser,fetchImpl=fetch}) {Object.assign(this,{read,write,openBrowser,fetch:fetchImpl});this.auth=null;this.refreshing=null;this.generation=0;this.calendarCache=null;}
+  status(){const saved=this.read();return {configured:!!saved.client,connected:!!saved.tokens,needsReconnect:!!saved.tokens&&!saved.tokens.scope?.split(' ').includes(LIST_SCOPE)};}
+  configure(json){const client=credentials(json);this.cancel();this.generation++;this.calendarCache=null;this.write({client});return this.status();}
   cancel(){this.auth?.cancel();this.auth=null;}
   async tokenRequest(body){
     const client=this.read().client;if(!client)throw new Error('먼저 OAuth 설정 JSON을 가져오세요.');
@@ -84,11 +87,12 @@ class GoogleCalendar {
     try{
       await auth.ready;const tokens=await auth.result;
       if(generation!==this.generation)throw new Error('로그인이 취소되었습니다.');
-      if(tokens.scope && !tokens.scope.split(' ').includes(SCOPE))throw new Error('일정 접근 권한을 허용해야 연결할 수 있습니다.');
+      if(tokens.scope && !SCOPES.every(scope=>tokens.scope.split(' ').includes(scope)))throw new Error('일정과 캘린더 목록 조회 권한을 모두 허용해야 연결할 수 있습니다.');
+      tokens.scope||=SCOPE;this.generation++;this.calendarCache=null;
       this.write({...saved,tokens});return this.status();
     }finally{if(this.auth===auth)this.auth=null;}
   }
-  disconnect(){this.cancel();this.generation++;const {client}=this.read();this.write(client?{client}:{});return this.status();}
+  disconnect(){this.cancel();this.generation++;this.calendarCache=null;const {client}=this.read();this.write(client?{client}:{});return this.status();}
   async accessToken(){
     const saved=this.read();if(!saved.tokens)throw new Error('먼저 Google 계정을 연결하세요.');
     if(saved.tokens.expires_at>Date.now()+60000)return saved.tokens.access_token;
@@ -102,25 +106,77 @@ class GoogleCalendar {
     }
     return this.refreshing;
   }
-  async request(suffix,{method='GET',body,etag}={}){
+  checkCalendarId(id){if(typeof id!=='string'||!id||id.length>1024||/[\x00-\x1f]/.test(id))throw new Error('캘린더 ID가 올바르지 않습니다.');}
+  async apiRequest(route,{method='GET',body,etag}={}){
     const token=await this.accessToken();
-    return responseJSON(await this.fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events${suffix}`,{method,headers:{Authorization:`Bearer ${token}`,...(body?{'Content-Type':'application/json'}:{}),...(etag?{'If-Match':etag}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(20000)}));
+    return responseJSON(await this.fetch('https://www.googleapis.com/calendar/v3'+route,{method,headers:{Authorization:`Bearer ${token}`,...(body?{'Content-Type':'application/json'}:{}),...(etag?{'If-Match':etag}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(20000)}));
   }
-  async list({start,end}){
+  async request(suffix,{calendarId='primary',...options}={}){
+    this.checkCalendarId(calendarId);
+    return this.apiRequest(`/calendars/${encodeURIComponent(calendarId)}/events${suffix}`,options);
+  }
+  async calendars(force=false){
+    if(this.status().needsReconnect)throw new Error('공유 캘린더 목록 권한이 필요합니다. Google에 다시 로그인하세요.');
+    if(!force&&this.calendarCache&&Date.now()-this.calendarCache.time<60000)return this.calendarCache.items;
+    const generation=this.generation,items=[];const params=new URLSearchParams({minAccessRole:'reader',showHidden:'true',maxResults:'250'});
+    do{const page=await this.apiRequest('/users/me/calendarList?'+params);items.push(...(page.items||[]));if(!page.nextPageToken)break;params.set('pageToken',page.nextPageToken);}while(true);
+    if(generation!==this.generation)throw new Error('Google 연결이 변경되었습니다. 다시 시도하세요.');
+    const mapped=items.filter(c=>!c.deleted&&['owner','writer','reader'].includes(c.accessRole)).map(c=>({id:c.id,name:c.summaryOverride||c.summary||'(이름 없음)',primary:!!c.primary,readOnly:!['owner','writer'].includes(c.accessRole),color:/^#[0-9a-f]{6}$/i.test(c.backgroundColor||'')?c.backgroundColor:'#9fc2e8'}));
+    const saved=this.read(),account=mapped.find(c=>c.primary)?.id;
+    if(saved.calendarAccount&&account&&saved.calendarAccount!==account)delete saved.calendarSelection;
+    if(account&&saved.calendarAccount!==account){saved.calendarAccount=account;this.write(saved);}
+    this.calendarCache={time:Date.now(),items:mapped};return mapped;
+  }
+  selection(items){
+    const pref=this.read().calendarSelection;
+    const primary=items.find(c=>c.primary)?.id;
+    const visible=Array.isArray(pref?.visibleIds)?pref.visibleIds.filter(id=>items.some(c=>c.id===id)):(primary?[primary]:[]);
+    const writable=items.filter(c=>!c.readOnly);
+    const writeId=writable.some(c=>c.id===pref?.writeCalendarId)?pref.writeCalendarId:(writable.find(c=>c.primary)||writable[0])?.id||'';
+    return {visibleIds:visible,writeCalendarId:writeId};
+  }
+  async calendarSettings(force=false){const items=await this.calendars(force);return {items,...this.selection(items)};}
+  async setSelection(input){
+    if(!input||!Array.isArray(input.visibleIds)||input.visibleIds.length>20||new Set(input.visibleIds).size!==input.visibleIds.length)throw new Error('표시할 캘린더는 최대 20개까지 선택하세요.');
+    const generation=this.generation,items=await this.calendars();
+    if(generation!==this.generation)throw new Error('Google 연결이 변경되었습니다.');
+    if(input.visibleIds.some(id=>!items.some(c=>c.id===id))||input.writeCalendarId&&!items.some(c=>c.id===input.writeCalendarId&&!c.readOnly))throw new Error('캘린더 접근 권한을 확인하세요.');
+    if(!input.writeCalendarId&&items.some(c=>!c.readOnly))throw new Error('일정을 저장할 캘린더를 선택하세요.');
+    this.write({...this.read(),calendarSelection:{visibleIds:input.visibleIds,writeCalendarId:input.writeCalendarId||''}});
+    return {items,...this.selection(items)};
+  }
+  async calendarInfo(id,write=false){
+    this.checkCalendarId(id);
+    if(id==='primary')return {id,name:'기본 캘린더',readOnly:false,color:'#9fc2e8'};
+    const info=(await this.calendars()).find(c=>c.id===id);
+    if(!info)throw new Error('캘린더 접근 권한이 없습니다. 목록을 새로고침하세요.');
+    if(write&&info.readOnly)throw new Error('읽기 전용 공유 캘린더의 일정은 변경할 수 없습니다.');
+    return info;
+  }
+  async list({start,end,calendarIds=['primary']}){
     if(!validDate(start)||!validDate(end)||end<=start||(new Date(end)-new Date(start))>100*86400000)throw new Error('조회 날짜 범위가 올바르지 않습니다.');
-    const params=new URLSearchParams({timeMin:new Date(`${start}T00:00:00`).toISOString(),timeMax:new Date(`${end}T00:00:00`).toISOString(),singleEvents:'true',orderBy:'startTime',maxResults:'2500'});
-    const items=[];
-    do{const page=await this.request(`?${params}`);items.push(...(page.items||[]));if(!page.nextPageToken)break;params.set('pageToken',page.nextPageToken);}while(true);
-    return items.filter(e=>e.status!=='cancelled').map(e=>({id:e.id,etag:e.etag,summary:e.summary||'(제목 없음)',description:e.description||'',start:e.start,end:e.end,recurring:!!e.recurringEventId,readOnly:e.locked===true || e.eventType && e.eventType!=='default'}));
+    if(!Array.isArray(calendarIds)||calendarIds.length>20)throw new Error('표시할 캘린더는 최대 20개입니다.');
+    const result=[];
+    for(let offset=0;offset<calendarIds.length;offset+=4){
+      const batch=await Promise.all(calendarIds.slice(offset,offset+4).map(async calendarId=>{
+        const info=await this.calendarInfo(calendarId);
+        const params=new URLSearchParams({timeMin:new Date(`${start}T00:00:00`).toISOString(),timeMax:new Date(`${end}T00:00:00`).toISOString(),singleEvents:'true',orderBy:'startTime',maxResults:'2500'});
+        const items=[];
+        do{const page=await this.request(`?${params}`,{calendarId});items.push(...(page.items||[]));if(!page.nextPageToken)break;params.set('pageToken',page.nextPageToken);}while(true);
+        return items.filter(e=>e.status!=='cancelled').map(e=>({id:e.id,etag:e.etag,calendarId,calendarName:info.name,calendarColor:info.color,summary:e.summary||'(제목 없음)',description:e.description||'',start:e.start,end:e.end,recurring:!!e.recurringEventId,readOnly:info.readOnly||e.locked===true||!!(e.eventType&&e.eventType!=='default')}));
+      }));result.push(...batch.flat());
+    }
+    return result.sort((a,b)=>(a.start?.dateTime||a.start?.date||'').localeCompare(b.start?.dateTime||b.start?.date||''));
   }
   async upsert(input){
+    const calendarId=input?.calendarId||'primary';await this.calendarInfo(calendarId,true);
     const body=eventBody(input);
-    if(input.id){this.checkId(input.id);if(typeof input.etag!=='string'||!input.etag)throw new Error('최신 일정을 새로고침하세요.');return this.request(`/${encodeURIComponent(input.id)}`,{method:'PATCH',body,etag:input.etag});}
+    if(input.id){this.checkId(input.id);if(typeof input.etag!=='string'||!input.etag)throw new Error('최신 일정을 새로고침하세요.');return this.request(`/${encodeURIComponent(input.id)}`,{calendarId,method:'PATCH',body,etag:input.etag});}
     if(!/^[a-v0-9]{5,1024}$/.test(input.requestId||''))throw new Error('일정 요청 ID가 올바르지 않습니다.');
     // An ID retained by the editor makes retrying a timed-out insert idempotent.
-    return this.request('',{method:'POST',body:{...body,id:input.requestId}});
+    return this.request('',{calendarId,method:'POST',body:{...body,id:input.requestId}});
   }
   checkId(id){if(typeof id!=='string'||!id||id.length>1024||!/^[-_a-zA-Z0-9]+$/.test(id))throw new Error('일정 ID가 올바르지 않습니다.');}
-  async remove({id,etag}){this.checkId(id);if(typeof etag!=='string'||!etag)throw new Error('최신 일정을 새로고침하세요.');return this.request(`/${encodeURIComponent(id)}`,{method:'DELETE',etag});}
+  async remove({id,etag,calendarId='primary'}){await this.calendarInfo(calendarId,true);this.checkId(id);if(typeof etag!=='string'||!etag)throw new Error('최신 일정을 새로고침하세요.');return this.request(`/${encodeURIComponent(id)}`,{calendarId,method:'DELETE',etag});}
 }
 module.exports={GoogleCalendar,credentials,eventBody,beginAuthorization};

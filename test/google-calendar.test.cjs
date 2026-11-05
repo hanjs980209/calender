@@ -57,3 +57,33 @@ test('충돌/권한 오류는 안전한 안내를 반환하고 Google 응답 본
  const f=fixture(async()=>json({error:'sensitive remote body'},412));await assert.rejects(f.api.upsert({...input,id:'event',etag:'old'}),/다른 PC/);
  const g=fixture(async()=>json({error:'sensitive remote body'},403));await assert.rejects(g.api.list({start:'2026-10-01',end:'2026-11-01'}),/권한/);
 });
+const scope='https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly';
+const calendars=[{id:'me@example.test',summary:'내 일정',primary:true,accessRole:'owner'},{id:'team@group.calendar.google.com',summary:'팀 공유',accessRole:'writer'},{id:'view@group.calendar.google.com',summary:'가족 공유',accessRole:'reader'}];
+function sharedFixture(handler){const f=fixture(async(url,options)=>{if(url.includes('/users/me/calendarList'))return json({items:calendars});return handler(url,options);});f.set({...f.get(),tokens:{...f.get().tokens,scope}});return f;}
+test('기존 일정 전용 토큰은 추가 로그인 대상으로 표시하고 기본 일정은 유지한다',async()=>{
+ const f=fixture(async()=>json({items:[]}));assert.equal(f.api.status().needsReconnect,true);await assert.rejects(f.api.calendars(),/다시 로그인/);assert.deepEqual(await f.api.list({start:'2026-10-01',end:'2026-11-01'}),[]);
+});
+test('캘린더 목록 페이지와 공유 읽기 권한을 반영하고 freeBusy 항목은 제외한다',async()=>{
+ let pages=0;const f=fixture(async url=>{assert(new URL(url).searchParams.get('minAccessRole')==='reader');pages++;return pages===1?json({items:[calendars[0]],nextPageToken:'next'}):json({items:[...calendars.slice(1),{id:'busy',accessRole:'freeBusyReader'}]});});f.set({...f.get(),tokens:{...f.get().tokens,scope}});
+ const result=await f.api.calendarSettings();assert.equal(pages,2);assert.equal(result.items.length,3);assert.equal(result.items[2].readOnly,true);assert.deepEqual(result.visibleIds,['me@example.test']);
+});
+test('공유 표시 선택과 저장 대상을 보존하고 읽기 전용 저장 대상을 거부한다',async()=>{
+ const f=sharedFixture(async()=>json({}));await f.api.calendarSettings();const pref={visibleIds:calendars.map(c=>c.id),writeCalendarId:calendars[1].id};await f.api.setSelection(pref);assert.deepEqual(f.api.selection(await f.api.calendars()),pref);
+ await assert.rejects(f.api.setSelection({...pref,writeCalendarId:calendars[2].id}),/권한/);await assert.rejects(f.api.setSelection({...pref,visibleIds:['unknown']}),/권한/);
+ await f.api.setSelection({...pref,visibleIds:[]});assert.deepEqual(f.api.selection(await f.api.calendars()).visibleIds,[]);
+});
+test('여러 캘린더의 같은 ID 일정을 구분하고 읽기 전용 정보와 출처를 반환한다',async()=>{
+ const f=sharedFixture(async()=>json({items:[{id:'same',summary:'공유 일정',start:{date:'2026-10-29'},end:{date:'2026-10-30'}}]}));await f.api.calendars();
+ const result=await f.api.list({start:'2026-10-01',end:'2026-11-01',calendarIds:[calendars[1].id,calendars[2].id]});assert.equal(result.length,2);assert.notEqual(result[0].calendarId,result[1].calendarId);assert.equal(result.find(e=>e.calendarId===calendars[2].id).readOnly,true);assert.equal(result[0].calendarName,'팀 공유');
+});
+test('공유 일정 생성·수정·삭제는 선택한 캘린더 URL을 사용한다',async()=>{
+ const calls=[];const f=sharedFixture(async(url,options)=>{calls.push({url,options});return options.method==='DELETE'?new Response(null,{status:204}):json({id:'event'});});
+ const calendarId=calendars[1].id;await f.api.upsert({...input,calendarId});await f.api.upsert({...input,id:'event',etag:'e',calendarId});await f.api.remove({id:'event',etag:'e',calendarId});
+ assert(calls.every(c=>c.url.includes('/calendars/'+encodeURIComponent(calendarId)+'/events')));assert.deepEqual(calls.map(c=>c.options.method),['POST','PATCH','DELETE']);
+ await assert.rejects(f.api.upsert({...input,calendarId:calendars[2].id}),/읽기 전용/);await assert.rejects(f.api.remove({id:'event',etag:'e',calendarId:calendars[2].id}),/읽기 전용/);assert.equal(calls.length,3);
+});
+test('로그인 계정이 바뀌면 이전 계정의 캘린더 선택을 이어 쓰지 않는다',async()=>{
+ let other=false;const f=fixture(async()=>json({items:other?[{id:'other@example.test',primary:true,accessRole:'owner'}]:calendars}));f.set({...f.get(),tokens:{...f.get().tokens,scope}});
+ await f.api.calendarSettings();await f.api.setSelection({visibleIds:[calendars[1].id],writeCalendarId:calendars[1].id});other=true;f.api.calendarCache=null;
+ const result=await f.api.calendarSettings();assert.deepEqual(result.visibleIds,['other@example.test']);assert.equal(result.writeCalendarId,'other@example.test');
+});

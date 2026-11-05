@@ -82,6 +82,8 @@ else {
     });
     ipcMain.handle('google-connect',()=>google.connect());
     ipcMain.handle('google-disconnect',()=>google.disconnect());
+    ipcMain.handle('google-calendars',()=>google.calendarSettings(true));
+    ipcMain.handle('google-selection',(_,input)=>google.setSelection(input));
     ipcMain.handle('google-list',(_,range)=>google.list(range));
     ipcMain.handle('google-upsert',(_,input)=>google.upsert(input));
     ipcMain.handle('google-remove',(_,input)=>google.remove(input));
